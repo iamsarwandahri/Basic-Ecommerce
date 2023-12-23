@@ -1,0 +1,190 @@
+{% extends 'shop/main.html' %}
+{% load static %}
+{% block content %}
+     <div class="row">
+		<div class="col-lg-6">
+			<div class="box-element" id="form-wrapper">
+				<form method="POST" id="form">
+					{% csrf_token %}
+					<div id="user-info">
+						<div class="form-field">
+							<input required class="form-control" type="text" name="name" placeholder="Name..">
+						</div>
+						<div class="form-field">
+							<input required class="form-control" type="email" name="email" placeholder="Email..">
+						</div>
+					</div>
+					
+					<div id="shipping-info">
+						<hr>
+						<p>Shipping Information:</p>
+						<hr>
+						<div class="form-field">
+							<input id="address" class="form-control" type="text" name="address" placeholder="Address.." required>
+						</div>
+						<div class="form-field">
+							<input id="city" class="form-control" type="text" name="city" placeholder="City.." required>
+						</div>
+						<div class="form-field">
+							<input id="state" class="form-control" type="text" name="state" placeholder="State.." required>
+						</div>
+						<div class="form-field">
+							<input id="zipcode" class="form-control" type="text" name="zipcode" placeholder="Zip code.." required>
+						</div>
+					</div>
+					<hr>
+					<input id="form-button" class="btn btn-success btn-block" type="submit" value="Continue">
+				</form>
+			</div>
+
+			<br>
+			<div class="box-element hidden" id="payment-info">
+				<small>Paypal Options</small>
+				<div id="paypal-button-container"></div>
+				<!-- <button id= "make-payment" class='btn btn-success mx-2 make-payment' type="submit">Make Payment</button> -->
+			</div>
+			
+		</div>
+		  
+		
+		<div class="col-lg-6">
+			<div class="box-element">
+				<a  class="btn btn-outline-dark" href="{% url 'cart' %}">&#x2190; Back to Cart</a>
+				<hr>
+				<h3>Order Summary</h3>
+				<hr>
+				{% for item in items %}
+				<div class="cart-row">
+					<div style="flex:2"><img class="row-image" src="{{item.product.imageURL}}"></div>
+					<div style="flex:2"><p>{{item.product.product_name}}</p></div>
+					<div style="flex:1"><p>${{item.product.price}}</p></div>
+					<div style="flex:1"><p>x{{item.quantity}}</p></div>
+				</div>
+				{% endfor %}
+				<h5>Items: {{order.get_cart_items}}</h5>
+				<h5>Total: ${{order.get_cart_total}}</h5>
+			</div>
+		</div>
+	</div>
+
+
+{% endblock content %}
+
+
+{% block js %}
+
+<script src="https://www.paypal.com/sdk/js?client-id=AXaaQRe8HHm8b2jXZyX-IZOCLg4t9pN0USrkmteJaR0u7Xw1VfikIbkzWMZHko1OLxwmYktX0HGLgfLw&currency=USD&disable-funding=credit,venmo"></script>
+
+<script>
+
+	var total = "{{order.get_cart_total}}"
+	total = parseFloat(total).toFixed(2)
+
+    paypal.Buttons({
+        style: {
+            color: 'blue',
+            shape: 'pill',
+            label: 'pay',
+            height: 40,
+        },
+        createOrder: function (data, actions) {
+            return actions.order.create({
+                purchase_units: [{
+                    amount: {
+                        currency_code: 'USD',
+                        value: total, // Adjust the amount as needed
+                    },
+                }],
+            });
+        },
+        onApprove: function (data, actions) {
+            return actions.order.capture().then(function (details) {
+                console.log('Capture result', details, JSON.stringify(details, null, 2));
+				submitFormData()
+                var transaction = details.purchase_units[0].payments.captures[0];
+                alert('Transaction ' + transaction.status + ': ' + transaction.id);
+            }).catch(function (error) {
+                console.error(error);
+                alert('Sorry, your transaction could not be processed.');
+            });
+        }
+    }).render('#paypal-button-container');
+
+
+	total = parseInt(total)
+	var shipping = "{{order.shipping}}"
+	var total = "{{order.get_cart_total}}"
+
+
+	if(total==0){
+		$('#form-wrapper').addClass("hidden")
+	}
+
+	if (shipping == "False" && user!='AnonymousUser'){
+		$('#form-wrapper').addClass("hidden")
+		<!-- $('#payment-info').removeClass("hidden") -->
+	}
+
+
+	csrftoken = $('#form input[name="csrfmiddlewaretoken"]').val()
+	console.log(csrftoken)
+
+	if( user != "AnonymousUser"){
+		$('#user-info').html('') }
+
+$("#form").submit(function(event){
+			event.preventDefault()
+			$('#form-button').addClass("hidden")
+			$('#payment-info').removeClass('hidden')
+})
+
+function submitFormData(){
+			var userFormData = {
+				'name': null,
+				'email': null,
+				'total': total,
+			}
+			var shippingData = {
+				'address': null,
+				'city': null,
+				'state': null,
+				'zip': null
+			}
+
+			if(shipping=='True'){
+				shippingData['address'] = $("#address").val(),
+				shippingData['city'] = $("#city").val(),
+				shippingData['state'] = $("#state").val(),
+				shippingData['zipcode'] = $("#zipcode").val() 
+				console.log(shippingData)
+				}
+			if(user!='AnonymousUser'){
+				userFormData['name'] = $("#name").val(),
+				userFormData['email'] = $("#email").val()
+
+			}
+
+			$.ajax({
+				type:"POST",
+				url: '/process_order/',
+				data:JSON.stringify({'form':userFormData,'shipping':shippingData}),
+				dataType: 'json',
+				headers: {
+					'X-CSRFToken': csrftoken,
+					'Content-Type': 'application/json',
+				},
+				success: function (data) {
+					console.log(data);
+					alert("The order has been placed! Thanks")
+					window.location.href = "{% url 'store' %}";}
+
+			}).done(function(data){
+				console.log(data)
+				alert("Thanks for placing the order we will deliver soon")
+				window.location.href = "{% url 'store' %}"
+			}).fail(function(error) {
+				console.error("Error:", error);
+			});
+		}
+	</script>
+{% endblock js %}
